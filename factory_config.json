@@ -115,9 +115,9 @@
     "_comment": "results_json lives in the causal-test repo (it writes there itself); we only READ it.",
     "results_json": "{repo_causal_test}/results/e7_4_results.json",
     "status_key": null,
-    "pass_key": "threshold_met",
+    "pass_key": null,
     "observed_key": "observed_peak_functional_agreement_pct",
-    "threshold_key": "predeclared_agreement_threshold_pct",
+    "fixed_threshold": 40.0,
     "metric_paths": {
       "observed_agreement_pct": "observed_peak_functional_agreement_pct",
       "predeclared_threshold_pct": "predeclared_agreement_threshold_pct",
@@ -126,6 +126,7 @@
       "milestone": "milestone"
     }
   },
+
 
   "bridge": {
     "out_dir": "{run_dir}/patches",
