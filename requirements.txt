@@ -1,0 +1,14 @@
+# Model Factory Command Center — runtime requirements
+# ----------------------------------------------------
+# The orchestration brain (run_factory.py) is standard-library only.
+# The plugin engines need numpy; the optional YAML config reader needs PyYAML.
+
+numpy>=1.24.0
+
+# Optional — only if you prefer YAML configuration files over JSON:
+# PyYAML>=6.0
+
+# NOTE: torch is intentionally NOT required by the Command Center itself.
+# It is only needed inside dedicated-feature-crosscoder (its own
+# requirements.txt) to write/inspect .pt checkpoints; the bridge engine
+# reads those checkpoints through a lazy, optional torch import.

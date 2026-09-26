@@ -1,0 +1,134 @@
+{
+  "_comment": [
+    "Default factory configuration — assumes this plugin folder and the nine",
+    "core repositories are siblings under one workspace root:",
+    "  workspace/",
+    "    dedicated-feature-crosscoder/   causal-functional-effect-test/",
+    "    ai-audit-router-toolkit/        circuit-vault/",
+    "    circuit-bridge-plugin/          vault-db-registry/",
+    "    factory-orchestrator/  <-- this repo (config lives here)",
+    "Adjust 'workspace_root' and 'repos' if your layout differs.",
+    "Placeholders available in commands/cwd/paths: {python} {workspace}",
+    "{plugin_dir} {run_id} {run_dir} {attempt} {repo_<name>} and, in",
+    "success-gate stages only, {summary_text} {results_json} {patch_npy} {patch_json}."
+  ],
+  "factory_name": "model-editing-governance-factory",
+  "workspace_root": "..",
+  "runs_dir": "runs/factory",
+  "max_retries": 3,
+  "restart_stage": "crosscoder",
+
+  "repos": {
+    "crosscoder": "dedicated-feature-crosscoder",
+    "causal_test": "causal-functional-effect-test",
+    "audit_router": "ai-audit-router-toolkit",
+    "circuit_vault": "circuit-vault",
+    "bridge_plugin": "circuit-bridge-plugin",
+    "vault_registry": "vault-db-registry"
+  },
+
+  "stages": [
+    {
+      "id": "crosscoder",
+      "name": "Stage 1 — DFC feature isolation (synthetic profile)",
+      "cwd": "{repo_crosscoder}",
+      "command": [
+        "{python}", "scripts/train_dfc.py",
+        "--synthetic",
+        "--synthetic-samples", "65536",
+        "--total-tokens", "1000000",
+        "--batch-tokens", "512",
+        "--alignment-coeff", "0.5",
+        "--n-latents-shared", "160",
+        "--top-k-shared", "10",
+        "--output-dir", "{run_dir}/dfc"
+      ],
+      "adjustments": [
+        { "flag": "--alignment-coeff",   "op": "multiply", "value": 1.5, "max": 4.0 },
+        { "flag": "--total-tokens",      "op": "multiply", "value": 2 },
+        { "flag": "--synthetic-samples", "op": "multiply", "value": 1.5, "max": 1048576 }
+      ],
+      "timeout_sec": 3600,
+      "expect_files": ["{run_dir}/dfc/dfc_final.pt", "{run_dir}/dfc/final_metrics.json"]
+    },
+    {
+      "id": "bridge",
+      "name": "Stage 2 — circuit bridge (crosscoder → graft patch)",
+      "cwd": "{repo_bridge_plugin}",
+      "command": [
+        "{python}", "circuit_bridge.py",
+        "--checkpoint", "{run_dir}/dfc/dfc_final.pt",
+        "--direction", "A2B",
+        "--scale", "1.0",
+        "--top-n", "4",
+        "--out-dir", "{run_dir}/patches",
+        "--patch-name", "latest_patch"
+      ],
+      "timeout_sec": 900,
+      "expect_files": ["{run_dir}/patches/latest_patch.npy", "{run_dir}/patches/latest_patch.json"]
+    },
+    {
+      "id": "causal_test",
+      "name": "Stage 3 — causal functional effect test (EQUYLAPTA E7.4)",
+      "cwd": "{repo_causal_test}",
+      "command": ["{python}", "demo/run_equylapta7_4.py"],
+      "timeout_sec": 1800,
+      "expect_files": ["results/e7_4_results.json"]
+    },
+    {
+      "id": "vault_register",
+      "name": "Success gate — index the validated patch into the vault registry",
+      "success_gate": true,
+      "enabled": false,
+      "optional": true,
+      "cwd": "{repo_vault_registry}",
+      "command": [
+        "{python}", "vault_db.py",
+        "--db", "{run_dir}/vault_registry.db",
+        "register",
+        "--circuit-file", "{patch_npy}",
+        "--source-model", "dfc-synthetic-A",
+        "--target-model", "dfc-synthetic-B",
+        "--layer-indices", "1",
+        "--feature-type", "STEERING_VECTOR",
+        "--capability-tags", "crosscoder-isolated,shared-I_S",
+        "--test-results", "{results_json}",
+        "--status", "VERIFIED"
+      ],
+      "timeout_sec": 300
+    },
+    {
+      "id": "audit_router",
+      "name": "Success gate — route the validated transplant through the audit pipeline",
+      "success_gate": true,
+      "cwd": "{repo_audit_router}",
+      "command": [
+        "{python}", "text_router.py", "route",
+        "--config", "examples/router_config.json",
+        "--text", "{summary_text}"
+      ],
+      "timeout_sec": 300
+    }
+  ],
+
+  "evaluation": {
+    "_comment": "results_json lives in the causal-test repo (it writes there itself); we only READ it.",
+    "results_json": "{repo_causal_test}/results/e7_4_results.json",
+    "status_key": null,
+    "pass_key": "threshold_met",
+    "observed_key": "observed_peak_functional_agreement_pct",
+    "threshold_key": "predeclared_agreement_threshold_pct",
+    "metric_paths": {
+      "observed_agreement_pct": "observed_peak_functional_agreement_pct",
+      "predeclared_threshold_pct": "predeclared_agreement_threshold_pct",
+      "causal_drop_pp": "source_causal_results.causal_drop",
+      "scientific_level": "scientific_level",
+      "milestone": "milestone"
+    }
+  },
+
+  "bridge": {
+    "out_dir": "{run_dir}/patches",
+    "patch_name": "latest_patch"
+  }
+}
